@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using UltralightNet;
 
@@ -11,6 +8,19 @@ namespace UltralightWPF
 {
     public static class Helpers
     {
+        public static void RaiseUIAsync(this EventHandler Handler, object? Sender)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(async () => Handler?.Invoke(Sender, null));
+        }
+        public static void RaiseUIAsync<T>(this EventHandler<T> Handler, object? Sender, T Args)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(async () => Handler?.Invoke(Sender, Args));
+        }
+        public static void RaiseUIAsync<T>(this Action<T> Handler, T Args)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(async () => Handler?.Invoke(Args));
+        }
+
         public static ULKeyEventModifiers ToULKeyEventModifiers(this ModifierKeys Modifiers)
         {
             ULKeyEventModifiers ULModifiers = 0;
@@ -19,6 +29,58 @@ namespace UltralightWPF
             if (Modifiers.HasFlag(ModifierKeys.Shift)) ULModifiers |= ULKeyEventModifiers.ShiftKey;
             if (Modifiers.HasFlag(ModifierKeys.Windows)) ULModifiers |= ULKeyEventModifiers.MetaKey;
             return ULModifiers;
+        }
+
+        public static Cursor ToCursor(this ULCursor e)
+        {
+            return e switch
+            {
+                ULCursor.Pointer => Cursors.Arrow,
+                ULCursor.Cross => Cursors.Cross,
+                ULCursor.Hand => Cursors.Hand,
+                ULCursor.IBeam => Cursors.IBeam,
+                ULCursor.Wait => Cursors.Wait,
+                ULCursor.Help => Cursors.Help,
+                ULCursor.EastResize => Cursors.SizeWE,
+                ULCursor.NorthResize => Cursors.SizeNS,
+                ULCursor.NorthEastResize => Cursors.SizeNESW,
+                ULCursor.NorthWestResize => Cursors.SizeNWSE,
+                ULCursor.SouthResize => Cursors.SizeNS,
+                ULCursor.SouthEastResize => Cursors.SizeNWSE,
+                ULCursor.SouthWestResize => Cursors.SizeNESW,
+                ULCursor.WestResize => Cursors.SizeWE,
+                ULCursor.NorthSouthResize => Cursors.SizeNS,
+                ULCursor.EastWestResize => Cursors.SizeWE,
+                ULCursor.NorthEastSouthWestResize => Cursors.SizeNESW,
+                ULCursor.NorthWestSouthEastResize => Cursors.SizeNWSE,
+                ULCursor.ColumnResize => Cursors.SizeWE,//TODO
+                ULCursor.RowResize => Cursors.SizeNS,//TODO
+                ULCursor.MiddlePanning => Cursors.ScrollAll,
+                ULCursor.EastPanning => Cursors.ScrollE,
+                ULCursor.NorthPanning => Cursors.ScrollN,
+                ULCursor.NorthEastPanning => Cursors.ScrollNE,
+                ULCursor.NorthWestPanning => Cursors.ScrollNW,
+                ULCursor.SouthPanning => Cursors.ScrollS,
+                ULCursor.SouthEastPanning => Cursors.ScrollSE,
+                ULCursor.SouthWestPanning => Cursors.ScrollSW,
+                ULCursor.WestPanning => Cursors.ScrollW,
+                ULCursor.Move => Cursors.ScrollAll,//TODO
+                ULCursor.VerticalText => Cursors.IBeam,//TODO
+                ULCursor.Cell => Cursors.Cross,//TODO
+                ULCursor.ContextMenu => Cursors.Arrow,//TODO
+                ULCursor.Alias => Cursors.Arrow,//TODO
+                ULCursor.Progress => Cursors.AppStarting,
+                ULCursor.NoDrop => Cursors.No,
+                ULCursor.Copy => Cursors.Arrow,//TODO
+                ULCursor.None => Cursors.None,
+                ULCursor.NotAllowed => Cursors.No,
+                ULCursor.ZoomIn => Cursors.Arrow,//TODO
+                ULCursor.ZoomOut => Cursors.Arrow,//TODO
+                ULCursor.Grab => Cursors.ScrollAll,//TODO
+                ULCursor.Grabbing => Cursors.ScrollAll,//TODO
+                ULCursor.Custom => Cursors.Arrow,//TODO
+                _ => Cursors.Arrow,
+            };
         }
 
         public static ULMouseEventButton GetMouseEvents(this MouseButtonEventArgs e)
@@ -72,6 +134,14 @@ namespace UltralightWPF
         {
             return (int)DllUtils.MapVirtualKey(VirtualKey, 0);
         }
+
+        //TODO: Extended cursors.
+        /*public static Cursor GetCursor(int CursorID)
+        {
+            IntPtr Handle = DllUtils.LoadCursor(IntPtr.Zero, CursorID);
+            if (Handle == IntPtr.Zero) return Cursors.Arrow;
+            return CursorInteropHelper.Create(new SafeFileHandle(Handle, false));
+        }*/
     }
 
     public static class DllUtils
@@ -84,5 +154,8 @@ namespace UltralightWPF
 
         [DllImport("user32.dll")]
         public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
+        /*[DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);*/
     }
 }

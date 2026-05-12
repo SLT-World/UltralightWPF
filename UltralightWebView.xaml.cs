@@ -31,6 +31,12 @@ namespace UltralightWPF
             if (_View != null)
                 _View.URL = Url;
         }
+
+        public void NavigateToString(string Text)
+        {
+            if (_View != null)
+                _View.HTML = Text;
+        }
         public void GoBack() => _View?.GoBack();
         public void GoForward() => _View?.GoForward();
         public void Reload() => _View?.Reload();
@@ -40,20 +46,6 @@ namespace UltralightWPF
         public UltralightWebView()
         {
             InitializeComponent();
-        }
-
-        public void Initialize(Renderer _Renderer, ULViewConfig? Config = null)
-        {
-            Config ??= new ULViewConfig();
-
-            this._Renderer = _Renderer;
-            uint _Width = (ActualWidth > 0) ? (uint)ActualWidth : 1;
-            uint _Height = (ActualHeight > 0) ? (uint)ActualHeight : 1;
-            _View = _Renderer.CreateView(_Width, _Height, Config);
-            _View?.Focus();
-            CompositionTarget.Rendering += (s, args) => {
-                InvalidateVisual();
-            };
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -91,6 +83,48 @@ namespace UltralightWPF
             _Renderer = null;
         }
 
+        public void Initialize(Renderer _Renderer, ULViewConfig? Config = null)
+        {
+            Config ??= new ULViewConfig();
+
+            this._Renderer = _Renderer;
+            uint _Width = (ActualWidth > 0) ? (uint)ActualWidth : 1;
+            uint _Height = (ActualHeight > 0) ? (uint)ActualHeight : 1;
+            _View = _Renderer.CreateView(_Width, _Height, Config);
+            _View.Focus();
+            _View.OnChangeTitle += View_OnChangeTitle;
+            _View.OnChangeURL += View_OnChangeURL;
+            //_View.OnChangeTooltip += View_OnChangeTooltip;
+            _View.OnChangeCursor += View_OnChangeCursor;
+            CompositionTarget.Rendering += (s, args) => {
+                InvalidateVisual();
+            };
+        }
+
+        private void View_OnChangeURL(string e)
+        {
+            UrlChanged.RaiseUIAsync(this, e);
+        }
+
+        private void View_OnChangeCursor(ULCursor e)
+        {
+            Cursor = e.ToCursor();
+        }
+
+        public event EventHandler<string> UrlChanged;
+        public event EventHandler<string> TitleChanged;
+        /*public event EventHandler<string> ToolTipChanged;
+
+        private void View_OnChangeTooltip(string e)
+        {
+            ToolTipChanged.RaiseUIAsync(this, e);
+        }*/
+
+        private void View_OnChangeTitle(string e)
+        {
+            TitleChanged.RaiseUIAsync(this, e);
+        }
+
         protected override void OnMouseWheel(MouseWheelEventArgs e)
         {
             if (!e.Handled && _View != null)
@@ -110,6 +144,8 @@ namespace UltralightWPF
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
                 _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
+                    e.Handled = true;
             }
             base.OnPreviewKeyDown(e);
         }
@@ -122,6 +158,8 @@ namespace UltralightWPF
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
                 _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
+                    e.Handled = true;
             }
             base.OnPreviewKeyUp(e);
         }

@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Text;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using UltralightNet;
@@ -54,10 +51,6 @@ namespace UltralightWPF
             uint _Height = (ActualHeight > 0) ? (uint)ActualHeight : 1;
             _View = _Renderer.CreateView(_Width, _Height, Config);
             _View?.Focus();
-            MouseWheel += (sender, e) =>
-            {
-                _View?.FireScrollEvent(new ULScrollEvent() { DeltaY = e.Delta });
-            };
             CompositionTarget.Rendering += (s, args) => {
                 InvalidateVisual();
             };
@@ -96,6 +89,123 @@ namespace UltralightWPF
         public void Destroy()
         {
             _Renderer = null;
+        }
+
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            if (!e.Handled && _View != null)
+            {
+                bool IsShiftKeyDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+                _View?.FireScrollEvent(new ULScrollEvent() { DeltaX = IsShiftKeyDown ? e.Delta : 0, DeltaY = IsShiftKeyDown ? 0 : e.Delta });
+                e.Handled = true;
+            }
+            base.OnMouseWheel(e);
+        }
+
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            if (!e.Handled && _View != null)
+            {
+                string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
+                string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
+                int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
+                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+            }
+            base.OnPreviewKeyDown(e);
+        }
+
+        protected override void OnPreviewKeyUp(KeyEventArgs e)
+        {
+            if (!e.Handled && _View != null)
+            {
+                string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
+                string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
+                int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
+                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+            }
+            base.OnPreviewKeyUp(e);
+        }
+
+        protected override void OnPreviewTextInput(TextCompositionEventArgs e)
+        {
+            if (!e.Handled && _View != null)
+            {
+                for (int i = 0; i < e.Text.Length; i++)
+                {
+                    string Text = e.Text[i].ToString();
+                    _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, Text, Text, false, false, false));
+                }
+                e.Handled = true;
+            }
+            base.OnPreviewTextInput(e);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (!e.Handled && _View != null && e.StylusDevice == null)
+            {
+                Point Coordinate = e.GetPosition(this);
+                _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = ULMouseEventType.MouseMoved, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+            }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseDown(MouseButtonEventArgs e)
+        {
+            if (e.StylusDevice == null)
+            {
+                Focus();
+                _View?.Focus();
+                OnMouseButton(e);
+                if (e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Pressed)
+                    CaptureMouse();
+            }
+            base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseUp(MouseButtonEventArgs e)
+        {
+            if (e.StylusDevice == null)
+            {
+                OnMouseButton(e);
+                if (e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Released)
+                    ReleaseMouseCapture();
+            }
+            base.OnMouseUp(e);
+        }
+
+        private void OnMouseButton(MouseButtonEventArgs e)
+        {
+            if (!e.Handled && _View != null)
+            {
+                bool MouseUp = e.ButtonState == MouseButtonState.Released;
+                if (e.ChangedButton == MouseButton.XButton1)
+                {
+                    if (CanGoBack && MouseUp)
+                        GoBack();
+                }
+                else if (e.ChangedButton == MouseButton.XButton2)
+                {
+                    if (CanGoForward && MouseUp)
+                        GoForward();
+                }
+                else
+                {
+                    Point Coordinate = e.GetPosition(this);
+                    _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+                }
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnMouseLeave(MouseEventArgs e)
+        {
+            if (!e.Handled && _View != null && e.StylusDevice == null)
+            {
+                Point Coordinate = e.GetPosition(this);
+                _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+            }
+            base.OnMouseLeave(e);
         }
     }
 }

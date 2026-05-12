@@ -34,7 +34,7 @@ namespace UltralightWPF
             UltralightApp = ULApp.Create(new ULSettings(), new ULConfig());
             _Renderer = UltralightApp.Renderer;
             BrowserView.Initialize(_Renderer);
-            BrowserView.Navigate("https://github.com/SupinePandora43");
+            BrowserView.Navigate("https://slt-world.github.io/tests/inputs.html");
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Windows.Input;
 using UltralightNet;
 using UltralightNet.AppCore;
 
@@ -23,7 +24,20 @@ namespace UltralightWPF
             BrowserView.Navigate("https://slt-world.github.io/tests/");
             //BrowserView.Navigate("https://keyboardchecker.com/");
             BrowserView.TitleChanged += BrowserView_TitleChanged;
+            BrowserView.PreviewMouseWheel += BrowserView_PreviewMouseWheel;
             //BrowserView.ToolTipChanged += BrowserView_ToolTipChanged;
+        }
+
+        private void BrowserView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Delta > 0)
+                    BrowserView.ZoomIn();
+                else
+                    BrowserView.ZoomOut();
+                e.Handled = true;
+            }
         }
 
         /*private void BrowserView_ToolTipChanged(object? sender, string e)

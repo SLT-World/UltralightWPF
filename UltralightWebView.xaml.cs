@@ -45,6 +45,27 @@ namespace UltralightWPF
         public void Reload() => _View?.Reload();
         public void Stop() => _View?.Stop();
         public View? GetView() => _View;
+        
+        public double ZoomLevel
+        {
+            get => _View?.DeviceScale ?? 1;
+            set
+            {
+                if (_View != null)
+                {
+                    if (value < 0.25 || value > 5.25)
+                        return;
+                    _View.DeviceScale = value;
+                }
+            }
+        }
+        public double ZoomFactor = 1.1;
+        public void ZoomIn() =>
+            ZoomLevel *= ZoomFactor;
+        public void ZoomOut() =>
+            ZoomLevel /= ZoomFactor;
+        public void ZoomReset() =>
+            ZoomLevel = 1;
 
         public UltralightWebView()
         {
@@ -198,7 +219,7 @@ namespace UltralightWPF
             if (!e.Handled && _View != null && e.StylusDevice == null)
             {
                 Point Coordinate = e.GetPosition(this);
-                _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = ULMouseEventType.MouseMoved, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+                _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
             }
             base.OnMouseMove(e);
         }
@@ -245,7 +266,7 @@ namespace UltralightWPF
                 else
                 {
                     Point Coordinate = e.GetPosition(this);
-                    _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+                    _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
                 }
                 e.Handled = true;
             }
@@ -256,7 +277,7 @@ namespace UltralightWPF
             if (!e.Handled && _View != null && e.StylusDevice == null)
             {
                 Point Coordinate = e.GetPosition(this);
-                _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
+                _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
             }
             base.OnMouseLeave(e);
         }

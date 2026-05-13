@@ -10,10 +10,12 @@ namespace UltralightWPF
     /// <summary>
     /// Interaction logic for UltralightWebView.xaml
     /// </summary>
-    public partial class UltralightWebView : UserControl
+    public partial class UltralightWebView : UserControl, IDisposable
     {
         private Renderer? _Renderer;
         private View? _View;
+        private bool _Disposed;
+
         public string Title => _View?.Title ?? "";
         public bool CanGoBack => _View?.CanGoBack ?? false;
         public bool CanGoForward => _View?.CanGoForward ?? false;
@@ -76,11 +78,6 @@ namespace UltralightWPF
             {
                 Bitmap.UnlockPixels();
             }
-        }
-
-        public void Destroy()
-        {
-            _Renderer = null;
         }
 
         public void Initialize(Renderer _Renderer, ULViewConfig? Config = null)
@@ -244,6 +241,35 @@ namespace UltralightWPF
                 _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)Coordinate.X, Y = (int)Coordinate.Y });
             }
             base.OnMouseLeave(e);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_Disposed)
+            {
+                if (_View != null)
+                {
+                    _View.OnChangeTitle -= View_OnChangeTitle;
+                    _View.OnChangeURL -= View_OnChangeURL;
+                    _View.OnChangeCursor -= View_OnChangeCursor;
+                    _View.Dispose();
+                    _View = null;
+                }
+                _Renderer = null;
+
+                _Disposed = true;
+            }
+        }
+
+        ~UltralightWebView()
+        {
+            Dispose(false);
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

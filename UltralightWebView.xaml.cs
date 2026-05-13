@@ -15,6 +15,7 @@ namespace UltralightWPF
         private Renderer? _Renderer;
         private View? _View;
         private bool _Disposed;
+        private WriteableBitmap? _TargetBitmap;
 
         public string Title => _View?.Title ?? "";
         public bool CanGoBack => _View?.CanGoBack ?? false;
@@ -52,19 +53,23 @@ namespace UltralightWPF
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
-            _View?.Resize((uint)sizeInfo.NewSize.Width, (uint)sizeInfo.NewSize.Height);
+            uint _Width = (uint)Math.Max(1, sizeInfo.NewSize.Width);
+            uint _Height = (uint)Math.Max(1, sizeInfo.NewSize.Height);
+            _View?.Resize(_Width, _Height);
+
+            _TargetBitmap = new WriteableBitmap((int)_Width, (int)_Height, 96, 96, PixelFormats.Bgra32, null);
+            RenderImage.Source = _TargetBitmap;
         }
 
-        protected override void OnRender(DrawingContext drawingContext)
+        public void UpdateSurfaceTexture()
         {
-            if (_Renderer == null) return;
-
-            _Renderer.Update();
-            _Renderer.Render();
-
-            if (_View == null || _View.Surface == null) return;
+            if (_Renderer == null || _View == null || _TargetBitmap == null || _View.Surface == null) return;
 
             ULBitmap Bitmap = _View.Surface.Value.Bitmap;
+            int Width = (int)Bitmap.Width;
+            int Height = (int)Bitmap.Height;
+
+            if (_TargetBitmap.PixelWidth != Width || _TargetBitmap.PixelHeight != Height) return;
             IntPtr Pixels;
             unsafe
             {
@@ -72,30 +77,43 @@ namespace UltralightWPF
             }
             try
             {
-                RenderImage.Source = BitmapSource.Create((int)Bitmap.Width, (int)Bitmap.Height, 96, 96, PixelFormats.Bgra32, null, Pixels, (int)Bitmap.Size, (int)Bitmap.RowBytes);
+                _TargetBitmap.Lock();
+                unsafe
+                {
+                    Buffer.MemoryCopy(
+                        (void*)Pixels,
+                        (void*)_TargetBitmap.BackBuffer,
+                        (ulong)(_TargetBitmap.BackBufferStride * Height),
+                        Bitmap.Size
+                    );
+                }
+
+                _TargetBitmap.AddDirtyRect(new Int32Rect(0, 0, Width, Height));
             }
             finally
             {
+                _TargetBitmap.Unlock();
                 Bitmap.UnlockPixels();
             }
         }
 
-        public void Initialize(Renderer _Renderer, ULViewConfig? Config = null)
+        public void Initialize(ULViewConfig? Config = null)
         {
-            Config ??= new ULViewConfig();
+            if (UltralightManager.Instance == null)
+                new UltralightManager().Initialize();
 
-            this._Renderer = _Renderer;
-            uint _Width = (ActualWidth > 0) ? (uint)ActualWidth : 1;
-            uint _Height = (ActualHeight > 0) ? (uint)ActualHeight : 1;
+            Config ??= UltralightManager.DefaultViewConfig;
+
+            _Renderer = UltralightManager.Instance.GlobalRenderer;
+            uint _Width = (uint)Math.Max(1, ActualWidth);
+            uint _Height = (uint)Math.Max(1, ActualHeight);
             _View = _Renderer.CreateView(_Width, _Height, Config);
             _View.Focus();
             _View.OnChangeTitle += View_OnChangeTitle;
             _View.OnChangeURL += View_OnChangeURL;
             //_View.OnChangeTooltip += View_OnChangeTooltip;
             _View.OnChangeCursor += View_OnChangeCursor;
-            CompositionTarget.Rendering += (s, args) => {
-                InvalidateVisual();
-            };
+            UltralightManager.Instance.RegisterView(this);
         }
 
         private void View_OnChangeURL(string e)
@@ -256,6 +274,7 @@ namespace UltralightWPF
                     _View = null;
                 }
                 _Renderer = null;
+                UltralightManager.Instance.UnregisterView(this);
 
                 _Disposed = true;
             }

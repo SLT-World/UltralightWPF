@@ -9,8 +9,6 @@ namespace UltralightWPF
     /// </summary>
     public partial class MainWindow : Window
     {
-        private Renderer _Renderer;
-        private ULApp UltralightApp;
         public MainWindow()
         {
             InitializeComponent();
@@ -19,13 +17,8 @@ namespace UltralightWPF
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            //AppCoreMethods.ulEnableDefaultLogger("./log.txt");
-            AppCoreMethods.SetPlatformFontLoader();
-            ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
-            UltralightApp = ULApp.Create(new ULSettings() { ForceCPURenderer = false }, new ULConfig());
-            _Renderer = UltralightApp.Renderer;
-            //TODO: Investigate nonfunctional GPU acceleration.
-            BrowserView.Initialize(_Renderer, new ULViewConfig() { IsAccelerated = false });
+            new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
+            BrowserView.Initialize(new ULViewConfig() { IsAccelerated = false });
             //BrowserView.Navigate("https://www.w3schools.com/cssref/tryit.php?filename=trycss_cursor");
             BrowserView.Navigate("https://slt-world.github.io/tests/");
             //BrowserView.Navigate("https://keyboardchecker.com/");

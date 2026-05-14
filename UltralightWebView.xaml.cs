@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -95,7 +96,7 @@ namespace UltralightWPF
 
         public unsafe void UpdateSurfaceTexture()
         {
-            if (_Renderer == null || _View == null || _TargetBitmap == null || _View.Surface == null) return;
+            if (_TargetBitmap == null || _View?.Surface == null) return;
 
             ULSurface Surface = _View.Surface.Value;
             ULIntRect DirtyRect = Surface.DirtyBounds;
@@ -110,11 +111,13 @@ namespace UltralightWPF
             int Height = DirtyRect.Bottom - DirtyRect.Top;
 
             if (Width <= 0 || Height <= 0) return;
-
-            /*double DirtyArea = Width * Height;
-            double TotalArea = TotalWidth * TotalHeight;
-            bool CopyFullFrame = (DirtyArea / TotalArea) > 0.15;*/
             bool CopyFullFrame = TotalWidth == Width && TotalHeight == Height;
+            if (!CopyFullFrame)
+            {
+                double DirtyArea = Width * Height;
+                double TotalArea = TotalWidth * TotalHeight;
+                CopyFullFrame = (DirtyArea / TotalArea) > 0.25;
+            }
 
             byte* pSrcPixels = Surface.LockPixels();
             try
@@ -137,7 +140,7 @@ namespace UltralightWPF
                     ulong lineLengthInBytes = (ulong)(Width * bytesPerPixel);
                     for (int i = 0; i < Height; i++)
                     {
-                        Buffer.MemoryCopy(pSrc, pDest, lineLengthInBytes, lineLengthInBytes);
+                        Unsafe.CopyBlockUnaligned(pDest, pSrc, (uint)lineLengthInBytes);
                         pSrc += srcStride;
                         pDest += destStride;
                     }
@@ -348,9 +351,9 @@ namespace UltralightWPF
                     _View.Dispose();
                     _View = null;
                 }
+                _TargetBitmap = null;
                 _Renderer = null;
                 _Disposed = true;
-                _TargetBitmap = null;
             }
         }
 

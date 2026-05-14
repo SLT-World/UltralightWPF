@@ -1,10 +1,8 @@
-﻿using System.Runtime.CompilerServices;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using UltralightNet;
+using UltralightWPF.Handlers;
 
 namespace UltralightWPF
 {
@@ -24,7 +22,7 @@ namespace UltralightWPF
         private Renderer? _Renderer;
         private View? _View;
         private bool _Disposed;
-        private WriteableBitmap? _TargetBitmap;
+        private IRenderHandler RenderHandler;
 
         public string Title => _View?.Title ?? "";
         public bool CanGoBack => _View?.CanGoBack ?? false;
@@ -79,6 +77,7 @@ namespace UltralightWPF
         public UltralightWebView()
         {
             InitializeComponent();
+            RenderHandler = new WriteableBitmapRenderHandler();
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -86,73 +85,13 @@ namespace UltralightWPF
             int _Width = (int)Math.Max(1, sizeInfo.NewSize.Width);
             int _Height = (int)Math.Max(1, sizeInfo.NewSize.Height);
             _View?.Resize((uint)_Width, (uint)_Height);
-
-            if (_TargetBitmap == null || _TargetBitmap.PixelWidth != _Width || _TargetBitmap.PixelHeight != _Height)
-            {
-                _TargetBitmap = new WriteableBitmap(_Width, _Height, 96, 96, PixelFormats.Bgra32, null);
-                RenderImage.Source = _TargetBitmap;
-            }
+            RenderHandler.AllocateBitmap(RenderImage, _Width, _Height);
         }
 
-        public unsafe void UpdateSurfaceTexture()
+        public void UpdateSurfaceTexture()
         {
-            if (_TargetBitmap == null || _View?.Surface == null) return;
-
-            ULSurface Surface = _View.Surface.Value;
-            ULIntRect DirtyRect = Surface.DirtyBounds;
-            if (DirtyRect.IsEmpty) return;
-
-            int TotalWidth = (int)Surface.Width;
-            int TotalHeight = (int)Surface.Height;
-
-            if (_TargetBitmap.PixelWidth != TotalWidth || _TargetBitmap.PixelHeight != TotalHeight) return;
-
-            int Width = DirtyRect.Right - DirtyRect.Left;
-            int Height = DirtyRect.Bottom - DirtyRect.Top;
-
-            if (Width <= 0 || Height <= 0) return;
-            bool CopyFullFrame = TotalWidth == Width && TotalHeight == Height;
-            if (!CopyFullFrame)
-            {
-                double DirtyArea = Width * Height;
-                double TotalArea = TotalWidth * TotalHeight;
-                CopyFullFrame = (DirtyArea / TotalArea) > 0.25;
-            }
-
-            byte* pSrcPixels = Surface.LockPixels();
-            try
-            {
-                _TargetBitmap.Lock();
-                if (CopyFullFrame)
-                {
-                    Buffer.MemoryCopy(pSrcPixels, (void*)_TargetBitmap.BackBuffer, (ulong)(_TargetBitmap.BackBufferStride * TotalHeight), Surface.Size);
-                    _TargetBitmap.AddDirtyRect(new Int32Rect(0, 0, TotalWidth, TotalHeight));
-                }
-                else
-                {
-                    int X = DirtyRect.Left;
-                    int Y = DirtyRect.Top;
-                    int destStride = _TargetBitmap.BackBufferStride;
-                    uint srcStride = Surface.RowBytes;
-                    int bytesPerPixel = 4;
-                    byte* pSrc = pSrcPixels + (Y * srcStride) + (X * bytesPerPixel);
-                    byte* pDest = (byte*)_TargetBitmap.BackBuffer + (Y * destStride) + (X * bytesPerPixel);
-                    ulong lineLengthInBytes = (ulong)(Width * bytesPerPixel);
-                    for (int i = 0; i < Height; i++)
-                    {
-                        Unsafe.CopyBlockUnaligned(pDest, pSrc, (uint)lineLengthInBytes);
-                        pSrc += srcStride;
-                        pDest += destStride;
-                    }
-                    _TargetBitmap.AddDirtyRect(new Int32Rect(X, Y, Width, Height));
-                }
-            }
-            finally
-            {
-                _TargetBitmap.Unlock();
-                Surface.UnlockPixels();
-                Surface.ClearDirtyBounds();
-            }
+            if (_View?.Surface == null) return;
+            RenderHandler.UpdateBitmap(_View.Surface.Value);
         }
 
         public void Initialize(ULViewConfig? Config = null)
@@ -351,7 +290,7 @@ namespace UltralightWPF
                     _View.Dispose();
                     _View = null;
                 }
-                _TargetBitmap = null;
+                RenderHandler.Dispose();
                 _Renderer = null;
                 _Disposed = true;
             }

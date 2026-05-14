@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+﻿using System.Windows;
 using System.Windows.Media;
 using UltralightNet;
 using UltralightNet.AppCore;
@@ -10,12 +10,10 @@ namespace UltralightWPF
         public static UltralightManager Instance;
 
         public Renderer? GlobalRenderer;
-        private ULApp? GlobalApp;
+        //private ULApp? GlobalApp;
         private List<UltralightWebView> ActiveWebViews = [];
-        private Stopwatch FrameStopwatch = new();
         private TimeSpan TargetFramePeriod;
         private TimeSpan LastFrameTime = TimeSpan.Zero;
-        private bool IsLooping;
 
         public static readonly ULViewConfig DefaultViewConfig = new() { IsAccelerated = false };
 
@@ -26,19 +24,35 @@ namespace UltralightWPF
 
         public Renderer Initialize(ULSettings? Settings = null, ULConfig? Config = null)
         {
+            if (GlobalRenderer != null)
+                return GlobalRenderer;
             Settings ??= new() { ForceCPURenderer = false, LoadShadersFromFileSystem = true };
             Config ??= new();
             //AppCoreMethods.ulEnableDefaultLogger("./log.txt");
             AppCoreMethods.SetPlatformFontLoader();
             ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
-            GlobalApp = ULApp.Create(Settings.Value, Config.Value);
+            //GlobalApp = ULApp.Create(Settings.Value, Config.Value);
             TargetFramePeriod = TimeSpan.FromSeconds(Config.Value.AnimationTimerDelay);
-            GlobalRenderer = GlobalApp.Renderer;
+            GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
+            //GlobalRenderer = GlobalApp.Renderer;
+            Application.Current.Exit += OnApplicationExit;
+            CompositionTarget.Rendering += OnCompositionRendering;
+            return GlobalRenderer;
+        }
 
-            FrameStopwatch.Start();
-            StartLoop();
+        private void OnApplicationExit(object sender, ExitEventArgs e)
+        {
+            Shutdown();
+        }
 
-            return GlobalRenderer!;
+        public void Shutdown()
+        {
+            Application.Current.Exit -= OnApplicationExit;
+            CompositionTarget.Rendering -= OnCompositionRendering;
+            for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
+                ActiveWebViews[i].Dispose();
+            GlobalRenderer?.Dispose();
+            //GlobalApp?.Quit();
         }
 
         public void RegisterView(UltralightWebView View)
@@ -52,18 +66,10 @@ namespace UltralightWPF
             ActiveWebViews.Remove(View);
         }
 
-        private void StartLoop()
-        {
-            if (IsLooping) return;
-            IsLooping = true;
-            CompositionTarget.Rendering += OnCompositionRendering;
-        }
-
         private void OnCompositionRendering(object? sender, EventArgs e)
         {
             if (GlobalRenderer == null) return;
-
-            TimeSpan CurrentElapsedTime = FrameStopwatch.Elapsed;
+            TimeSpan CurrentElapsedTime = ((RenderingEventArgs)e).RenderingTime;
             TimeSpan FrameDelta = CurrentElapsedTime - LastFrameTime;
 
             if (FrameDelta >= TargetFramePeriod)

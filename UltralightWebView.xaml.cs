@@ -7,6 +7,14 @@ using UltralightNet;
 
 namespace UltralightWPF
 {
+    public readonly struct LoadingStateResult(string _Url, ulong _FrameId, bool _IsMainFrame, bool _IsLoading)
+    {
+        public string Url { get; } = _Url;
+        public ulong FrameId { get; } = _FrameId;
+        public bool IsMainFrame { get; } = _IsMainFrame;
+        public bool IsLoading { get; } = _IsLoading;
+    }
+
     /// <summary>
     /// Interaction logic for UltralightWebView.xaml
     /// </summary>
@@ -74,47 +82,73 @@ namespace UltralightWPF
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
-            uint _Width = (uint)Math.Max(1, sizeInfo.NewSize.Width);
-            uint _Height = (uint)Math.Max(1, sizeInfo.NewSize.Height);
-            _View?.Resize(_Width, _Height);
+            int _Width = (int)Math.Max(1, sizeInfo.NewSize.Width);
+            int _Height = (int)Math.Max(1, sizeInfo.NewSize.Height);
+            _View?.Resize((uint)_Width, (uint)_Height);
 
-            _TargetBitmap = new WriteableBitmap((int)_Width, (int)_Height, 96, 96, PixelFormats.Bgra32, null);
-            RenderImage.Source = _TargetBitmap;
+            if (_TargetBitmap == null || _TargetBitmap.PixelWidth != _Width || _TargetBitmap.PixelHeight != _Height)
+            {
+                _TargetBitmap = new WriteableBitmap(_Width, _Height, 96, 96, PixelFormats.Bgra32, null);
+                RenderImage.Source = _TargetBitmap;
+            }
         }
 
-        public void UpdateSurfaceTexture()
+        public unsafe void UpdateSurfaceTexture()
         {
             if (_Renderer == null || _View == null || _TargetBitmap == null || _View.Surface == null) return;
 
-            ULBitmap Bitmap = _View.Surface.Value.Bitmap;
-            int Width = (int)Bitmap.Width;
-            int Height = (int)Bitmap.Height;
+            ULSurface Surface = _View.Surface.Value;
+            ULIntRect DirtyRect = Surface.DirtyBounds;
+            if (DirtyRect.IsEmpty) return;
 
-            if (_TargetBitmap.PixelWidth != Width || _TargetBitmap.PixelHeight != Height) return;
-            IntPtr Pixels;
-            unsafe
-            {
-                Pixels = (IntPtr)Bitmap.LockPixels();
-            }
+            int TotalWidth = (int)Surface.Width;
+            int TotalHeight = (int)Surface.Height;
+
+            if (_TargetBitmap.PixelWidth != TotalWidth || _TargetBitmap.PixelHeight != TotalHeight) return;
+
+            int Width = DirtyRect.Right - DirtyRect.Left;
+            int Height = DirtyRect.Bottom - DirtyRect.Top;
+
+            if (Width <= 0 || Height <= 0) return;
+
+            /*double DirtyArea = Width * Height;
+            double TotalArea = TotalWidth * TotalHeight;
+            bool CopyFullFrame = (DirtyArea / TotalArea) > 0.15;*/
+            bool CopyFullFrame = TotalWidth == Width && TotalHeight == Height;
+
+            byte* pSrcPixels = Surface.LockPixels();
             try
             {
                 _TargetBitmap.Lock();
-                unsafe
+                if (CopyFullFrame)
                 {
-                    Buffer.MemoryCopy(
-                        (void*)Pixels,
-                        (void*)_TargetBitmap.BackBuffer,
-                        (ulong)(_TargetBitmap.BackBufferStride * Height),
-                        Bitmap.Size
-                    );
+                    Buffer.MemoryCopy(pSrcPixels, (void*)_TargetBitmap.BackBuffer, (ulong)(_TargetBitmap.BackBufferStride * TotalHeight), Surface.Size);
+                    _TargetBitmap.AddDirtyRect(new Int32Rect(0, 0, TotalWidth, TotalHeight));
                 }
-
-                _TargetBitmap.AddDirtyRect(new Int32Rect(0, 0, Width, Height));
+                else
+                {
+                    int X = DirtyRect.Left;
+                    int Y = DirtyRect.Top;
+                    int destStride = _TargetBitmap.BackBufferStride;
+                    uint srcStride = Surface.RowBytes;
+                    int bytesPerPixel = 4;
+                    byte* pSrc = pSrcPixels + (Y * srcStride) + (X * bytesPerPixel);
+                    byte* pDest = (byte*)_TargetBitmap.BackBuffer + (Y * destStride) + (X * bytesPerPixel);
+                    ulong lineLengthInBytes = (ulong)(Width * bytesPerPixel);
+                    for (int i = 0; i < Height; i++)
+                    {
+                        Buffer.MemoryCopy(pSrc, pDest, lineLengthInBytes, lineLengthInBytes);
+                        pSrc += srcStride;
+                        pDest += destStride;
+                    }
+                    _TargetBitmap.AddDirtyRect(new Int32Rect(X, Y, Width, Height));
+                }
             }
             finally
             {
                 _TargetBitmap.Unlock();
-                Bitmap.UnlockPixels();
+                Surface.UnlockPixels();
+                Surface.ClearDirtyBounds();
             }
         }
 
@@ -134,7 +168,25 @@ namespace UltralightWPF
             _View.OnChangeURL += View_OnChangeURL;
             //_View.OnChangeTooltip += View_OnChangeTooltip;
             _View.OnChangeCursor += View_OnChangeCursor;
+            _View.OnBeginLoading += View_OnBeginLoading;
+            _View.OnFinishLoading += View_OnFinishLoading;
+            _View.OnFailLoading += View_OnFailLoading;
             UltralightManager.Instance.RegisterView(this);
+        }
+
+        private void View_OnFailLoading(ulong frameId, bool isMainFrame, string url, string description, string errorDomain, int errorCode)
+        {
+            LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, false));
+        }
+
+        private void View_OnFinishLoading(ulong frameId, bool isMainFrame, string url)
+        {
+            LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, false));
+        }
+
+        private void View_OnBeginLoading(ulong frameId, bool isMainFrame, string url)
+        {
+            LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, true));
         }
 
         private void View_OnChangeURL(string e)
@@ -147,6 +199,7 @@ namespace UltralightWPF
             Cursor = e.ToCursor();
         }
 
+        public event EventHandler<LoadingStateResult> LoadingStateChanged;
         public event EventHandler<string> UrlChanged;
         public event EventHandler<string> TitleChanged;
         /*public event EventHandler<string> ToolTipChanged;
@@ -166,7 +219,7 @@ namespace UltralightWPF
             if (!e.Handled && _View != null)
             {
                 bool IsShiftKeyDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
-                _View?.FireScrollEvent(new ULScrollEvent() { DeltaX = IsShiftKeyDown ? e.Delta : 0, DeltaY = IsShiftKeyDown ? 0 : e.Delta });
+                _View?.FireScrollEvent(new ULScrollEvent() { DeltaX = IsShiftKeyDown ? e.Delta : 0, DeltaY = IsShiftKeyDown ? 0 : e.Delta, Type = ULScrollEventType.ByPixel });
                 e.Handled = true;
             }
             base.OnMouseWheel(e);
@@ -286,6 +339,7 @@ namespace UltralightWPF
         {
             if (!_Disposed)
             {
+                UltralightManager.Instance.UnregisterView(this);
                 if (_View != null)
                 {
                     _View.OnChangeTitle -= View_OnChangeTitle;
@@ -295,9 +349,8 @@ namespace UltralightWPF
                     _View = null;
                 }
                 _Renderer = null;
-                UltralightManager.Instance.UnregisterView(this);
-
                 _Disposed = true;
+                _TargetBitmap = null;
             }
         }
 

@@ -19,13 +19,28 @@ namespace UltralightWPF
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
+
             BrowserView.Initialize(new ULViewConfig() { IsAccelerated = false });
             //BrowserView.Navigate("https://www.w3schools.com/cssref/tryit.php?filename=trycss_cursor");
+            //BrowserView.Navigate("https://ultralig.ht");
             BrowserView.Navigate("https://slt-world.github.io/tests/");
             //BrowserView.Navigate("https://keyboardchecker.com/");
             BrowserView.TitleChanged += BrowserView_TitleChanged;
             BrowserView.PreviewMouseWheel += BrowserView_PreviewMouseWheel;
             //BrowserView.ToolTipChanged += BrowserView_ToolTipChanged;
+
+            //TODO: HwndHost control, device scale issue encountered.
+            /*AppCoreMethods.SetPlatformFontLoader();
+            ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
+            using ULApp App = ULApp.Create(new(), new());
+            using ULWindow _Window = App.MainMonitor.CreateWindow(512, 512);
+            _Window.Title = "AppCore HwndHost";
+            using ULOverlay Overlay = _Window.CreateOverlay(_Window.ScreenWidth, _Window.ScreenHeight);
+            _Window.OnResize += Overlay.Resize;
+            _Window.OnClose += App.Quit;
+            View _View = Overlay.View;
+            _View.URL = "https://slt-world.github.io/tests/";
+            App.Run();*/
         }
 
         private void BrowserView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

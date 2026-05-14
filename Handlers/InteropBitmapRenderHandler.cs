@@ -1,29 +1,40 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using UltralightNet;
 
 namespace UltralightWPF.Handlers
 {
-    public class WriteableBitmapRenderHandler : IRenderHandler
+    public class InteropBitmapRenderHandler : IRenderHandler
     {
-        private WriteableBitmap? _Bitmap;
+        private InteropBitmap? _Bitmap;
+        private IntPtr _SectionHandle = IntPtr.Zero;
+        private IntPtr _MapPointer = IntPtr.Zero;
+        private uint _BufferSize = 0;
 
         public void AllocateBitmap(Image _Image, int _Width, int _Height)
         {
             if (_Bitmap == null || _Bitmap.PixelWidth != _Width || _Bitmap.PixelHeight != _Height)
             {
                 ReleaseBitmap();
-                _Bitmap = new(_Width, _Height, 96, 96, PixelFormats.Bgra32, null);
+                int Stride = _Width * 4;
+                _BufferSize = (uint)(Stride * _Height);
+
+                _SectionHandle = DllUtils.CreateFileMapping(DllUtils.INVALID_HANDLE_VALUE, IntPtr.Zero, DllUtils.PAGE_READWRITE, 0, _BufferSize, null);
+                if (_SectionHandle == IntPtr.Zero) return;
+                _MapPointer = DllUtils.MapViewOfFile(_SectionHandle, DllUtils.FILE_MAP_ALL_ACCESS, 0, 0, _BufferSize);
+                if (_MapPointer == IntPtr.Zero) return;
+
+                _Bitmap = (InteropBitmap)Imaging.CreateBitmapSourceFromMemorySection(_SectionHandle, _Width, _Height, PixelFormats.Bgra32, Stride, 0);
                 _Image.Source = _Bitmap;
             }
         }
 
         public unsafe void UpdateBitmap(ULSurface Surface)
         {
-            if (_Bitmap == null) return;
+            if (_Bitmap == null || _MapPointer == IntPtr.Zero) return;
             ULIntRect DirtyRect = Surface.DirtyBounds;
             if (DirtyRect.IsEmpty) return;
 
@@ -43,18 +54,18 @@ namespace UltralightWPF.Handlers
             byte* pSrcPixels = Surface.LockPixels();
             try
             {
-                _Bitmap.Lock();
-                byte* pDestBase = (byte*)_Bitmap.BackBuffer;
+                //TODO: Tearing observed.
+                byte* pDestBase = (byte*)_MapPointer;
                 if (CopyFullFrame)
                 {
-                    Buffer.MemoryCopy(pSrcPixels, pDestBase, (ulong)(_Bitmap.BackBufferStride * TotalHeight), Surface.Size);
-                    _Bitmap.AddDirtyRect(new Int32Rect(0, 0, TotalWidth, TotalHeight));
+                    Buffer.MemoryCopy(pSrcPixels, pDestBase, _BufferSize, (long)Surface.Size);
+                    _Bitmap.Invalidate();
                 }
                 else
                 {
                     int X = DirtyRect.Left;
                     int Y = DirtyRect.Top;
-                    int destStride = _Bitmap.BackBufferStride;
+                    int destStride = TotalWidth * 4;
                     uint srcStride = Surface.RowBytes;
                     int bytesPerPixel = 4;
                     byte* pSrc = pSrcPixels + (Y * srcStride) + (X * bytesPerPixel);
@@ -66,12 +77,11 @@ namespace UltralightWPF.Handlers
                         pSrc += srcStride;
                         pDest += destStride;
                     }
-                    _Bitmap.AddDirtyRect(new Int32Rect(X, Y, Width, Height));
+                    _Bitmap.Invalidate(new Int32Rect(X, Y, Width, Height));
                 }
             }
             finally
             {
-                _Bitmap.Unlock();
                 Surface.UnlockPixels();
                 Surface.ClearDirtyBounds();
             }
@@ -80,6 +90,16 @@ namespace UltralightWPF.Handlers
         public void ReleaseBitmap()
         {
             _Bitmap = null;
+            if (_MapPointer != IntPtr.Zero)
+            {
+                DllUtils.UnmapViewOfFile(_MapPointer);
+                _MapPointer = IntPtr.Zero;
+            }
+            if (_SectionHandle != IntPtr.Zero)
+            {
+                DllUtils.CloseHandle(_SectionHandle);
+                _SectionHandle = IntPtr.Zero;
+            }
         }
 
         public void Dispose()

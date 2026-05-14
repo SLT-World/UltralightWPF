@@ -130,10 +130,18 @@ namespace UltralightWPF
             return string.Empty;
         }
 
-        public static int GetNativeScanCode(uint VirtualKey)
+        /*public static int CharToKeyCode(char Character)
+        {
+            short ScanResult = DllUtils.VkKeyScan(Character);
+            int VirtualKeyCode = ScanResult & 0xff;
+            if (ScanResult == -1) VirtualKeyCode = 0;
+            return VirtualKeyCode;
+        }*/
+
+        /*public static int GetNativeScanCode(uint VirtualKey)
         {
             return (int)DllUtils.MapVirtualKey(VirtualKey, 0);
-        }
+        }*/
 
         //TODO: Extended cursors.
         /*public static Cursor GetCursor(int CursorID)
@@ -157,5 +165,26 @@ namespace UltralightWPF
 
         /*[DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);*/
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr CreateFileMapping(IntPtr hFile, IntPtr lpAttributes, uint flProtect, uint dwMaximumSizeHigh, uint dwMaximumSizeLow, string? lpName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr MapViewOfFile(IntPtr hFileMappingObject, uint dwDesiredAccess, uint dwFileOffsetHigh, uint dwFileOffsetLow, UIntPtr dwNumberOfBytesToMap);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnmapViewOfFile(IntPtr lpBaseAddress);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(IntPtr hObject);
+
+        public const uint PAGE_READWRITE = 0x04;
+        public const uint FILE_MAP_ALL_ACCESS = 0xF001F;
+        public static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
+
+        /*[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern short VkKeyScan(char ch);*/
     }
 }

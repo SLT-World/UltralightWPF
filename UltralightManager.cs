@@ -10,7 +10,7 @@ namespace UltralightWPF
         public static UltralightManager Instance;
 
         public Renderer? GlobalRenderer;
-        //private ULApp? GlobalApp;
+        private ULApp? GlobalApp;
         private List<UltralightWebView> ActiveWebViews = [];
         private TimeSpan TargetFramePeriod;
         private TimeSpan LastFrameTime = TimeSpan.Zero;
@@ -31,10 +31,11 @@ namespace UltralightWPF
             //AppCoreMethods.ulEnableDefaultLogger("./log.txt");
             AppCoreMethods.SetPlatformFontLoader();
             ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
-            //GlobalApp = ULApp.Create(Settings.Value, Config.Value);
+            GlobalApp = ULApp.Create(Settings.Value, Config.Value);
             TargetFramePeriod = TimeSpan.FromSeconds(Config.Value.AnimationTimerDelay);
-            GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
-            //GlobalRenderer = GlobalApp.Renderer;
+            //WARNING: Disables native clipboard functionality.
+            //GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
+            GlobalRenderer = GlobalApp.Renderer;
             Application.Current.Exit += OnApplicationExit;
             CompositionTarget.Rendering += OnCompositionRendering;
             return GlobalRenderer;

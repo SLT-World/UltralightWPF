@@ -1,8 +1,10 @@
-﻿using System.Windows;
+﻿using System.Diagnostics;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using UltralightNet;
 using UltralightWPF.Handlers;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace UltralightWPF
 {
@@ -77,7 +79,8 @@ namespace UltralightWPF
         public UltralightWebView()
         {
             InitializeComponent();
-            RenderHandler = new WriteableBitmapRenderHandler();
+            RenderHandler = new InteropBitmapRenderHandler();
+            //RenderHandler = new WriteableBitmapRenderHandler();
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -113,6 +116,7 @@ namespace UltralightWPF
             _View.OnBeginLoading += View_OnBeginLoading;
             _View.OnFinishLoading += View_OnFinishLoading;
             _View.OnFailLoading += View_OnFailLoading;
+            //CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, OnPaste, CanPaste));
             UltralightManager.Instance.RegisterView(this);
         }
 
@@ -174,7 +178,8 @@ namespace UltralightWPF
                 string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
-                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                //_View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
                 if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
                     e.Handled = true;
             }
@@ -188,7 +193,8 @@ namespace UltralightWPF
                 string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
-                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                //_View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
+                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
                 if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
                     e.Handled = true;
             }
@@ -199,14 +205,31 @@ namespace UltralightWPF
         {
             if (!e.Handled && _View != null)
             {
-                for (int i = 0; i < e.Text.Length; i++)
-                {
-                    string Text = e.Text[i].ToString();
-                    _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, Text, Text, false, false, false));
-                }
+                OnTextInput(e.Text);
                 e.Handled = true;
             }
             base.OnPreviewTextInput(e);
+        }
+        /*private void CanPaste(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = Clipboard.ContainsText();
+            e.Handled = true;
+        }
+        private void OnPaste(object sender, ExecutedRoutedEventArgs e)
+        {
+            string Text = Clipboard.GetText();
+            OnTextInput(Text);
+        }*/
+
+        private void OnTextInput(string Text)
+        {
+            for (int i = 0; i < Text.Length; i++)
+            {
+                char Character = Text[i];
+                string CharString = Character.ToString();
+                //int KeyCode = Helpers.CharToKeyCode(Character);
+                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, CharString, CharString, false, false, false));
+            }
         }
 
         protected override void OnMouseMove(MouseEventArgs e)

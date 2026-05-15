@@ -23,6 +23,7 @@ namespace UltralightWPF
             BrowserView.Initialize(new ULViewConfig() { IsAccelerated = false });
             //BrowserView.Navigate("https://www.w3schools.com/cssref/tryit.php?filename=trycss_cursor");
             //BrowserView.Navigate("https://ultralig.ht");
+            //BrowserView.Navigate("file:///inspector/Main.html");
             BrowserView.Navigate("https://slt-world.github.io/tests/");
             //BrowserView.Navigate("https://keyboardchecker.com/");
             BrowserView.TitleChanged += BrowserView_TitleChanged;
@@ -42,6 +43,25 @@ namespace UltralightWPF
             _View.URL = "https://slt-world.github.io/tests/";
             App.Run();*/
         }
+
+        /*protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.Key == Key.F12 || e.SystemKey == Key.F12)
+            {
+                if (InspectorView.Visibility == Visibility.Visible)
+                {
+                    InspectorView.Visibility = Visibility.Collapsed;
+                    InspectorView.Dispose();
+                }
+                else
+                {
+                    InspectorView.Visibility = Visibility.Visible;
+                    BrowserView.ShowInspector(InspectorView);
+                }
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
+        }*/
 
         private void BrowserView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {

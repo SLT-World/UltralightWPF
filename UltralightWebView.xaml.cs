@@ -1,10 +1,8 @@
-﻿using System.Diagnostics;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using UltralightNet;
 using UltralightWPF.Handlers;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace UltralightWPF
 {
@@ -79,8 +77,9 @@ namespace UltralightWPF
         public UltralightWebView()
         {
             InitializeComponent();
-            RenderHandler = new InteropBitmapRenderHandler();
-            //RenderHandler = new WriteableBitmapRenderHandler();
+            //RenderHandler = new InteropBitmapRenderHandler();
+            RenderHandler = new WriteableBitmapRenderHandler();
+            //RenderHandler = new D3DImageRenderHandler();
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -93,22 +92,21 @@ namespace UltralightWPF
 
         public void UpdateSurfaceTexture()
         {
-            if (_View?.Surface == null) return;
-            RenderHandler.UpdateBitmap(_View.Surface.Value);
+            if (_View == null) return;
+            //TODO: Utilize GPU _View.RenderTarget.
+            RenderHandler.UpdateBitmap(_View!);
         }
 
-        public void Initialize(ULViewConfig? Config = null)
+        public void Initialize(ULViewConfig? Config = null, View? InitialView = null)
         {
+            if (_Disposed)
+                throw new Exception("Disposed");
             if (UltralightManager.Instance == null)
                 new UltralightManager().Initialize();
 
             Config ??= UltralightManager.DefaultViewConfig;
-
-            _Renderer = UltralightManager.Instance.GlobalRenderer;
-            uint _Width = (uint)Math.Max(1, ActualWidth);
-            uint _Height = (uint)Math.Max(1, ActualHeight);
-            _View = _Renderer.CreateView(_Width, _Height, Config);
-            _View.Focus();
+            _Renderer = UltralightManager.Instance.GlobalRenderer!;
+            _View = InitialView ?? _Renderer.CreateView((uint)Math.Max(1, ActualWidth), (uint)Math.Max(1, ActualHeight), Config);
             _View.OnChangeTitle += View_OnChangeTitle;
             _View.OnChangeURL += View_OnChangeURL;
             //_View.OnChangeTooltip += View_OnChangeTooltip;
@@ -116,8 +114,8 @@ namespace UltralightWPF
             _View.OnBeginLoading += View_OnBeginLoading;
             _View.OnFinishLoading += View_OnFinishLoading;
             _View.OnFailLoading += View_OnFailLoading;
-            //CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, OnPaste, CanPaste));
             UltralightManager.Instance.RegisterView(this);
+            Focus();
         }
 
         private void View_OnFailLoading(ulong frameId, bool isMainFrame, string url, string description, string errorDomain, int errorCode)
@@ -159,6 +157,21 @@ namespace UltralightWPF
         {
             TitleChanged.RaiseUIAsync(this, e);
         }
+
+        //TODO: Investigate inoperability.
+        /*public void ShowInspector(UltralightWebView InspectorWebView, ULViewConfig? Config = null)
+        {
+            View? InspectorView = _View?.CreateLocalInspectorView();
+            Debug.WriteLine(InspectorView.URL);
+            if (InspectorView != null)
+                InspectorWebView.Initialize(Config, InspectorView);*/
+            /*Window InspectorWindow = new()
+            {
+                Title = $"Ultralight Developer Tools - {InspectedUrl}",
+                Width = 800,
+                Height = 600
+            };*/
+        //}
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)
         {
@@ -210,23 +223,13 @@ namespace UltralightWPF
             }
             base.OnPreviewTextInput(e);
         }
-        /*private void CanPaste(object sender, CanExecuteRoutedEventArgs e)
-        {
-            e.CanExecute = Clipboard.ContainsText();
-            e.Handled = true;
-        }
-        private void OnPaste(object sender, ExecutedRoutedEventArgs e)
-        {
-            string Text = Clipboard.GetText();
-            OnTextInput(Text);
-        }*/
 
         private void OnTextInput(string Text)
         {
             for (int i = 0; i < Text.Length; i++)
             {
-                char Character = Text[i];
-                string CharString = Character.ToString();
+                //char Character = Text[i];
+                string CharString = Text[i].ToString();
                 //int KeyCode = Helpers.CharToKeyCode(Character);
                 _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, CharString, CharString, false, false, false));
             }
@@ -242,12 +245,29 @@ namespace UltralightWPF
             base.OnMouseMove(e);
         }
 
+        protected override void OnGotFocus(RoutedEventArgs e)
+        {
+            _View?.Focus();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+        {
+            _View?.Focus();
+            base.OnGotKeyboardFocus(e);
+        }
+
+        protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+        {
+            _View?.Unfocus();
+            base.OnLostKeyboardFocus(e);
+        }
+
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
             if (e.StylusDevice == null)
             {
                 Focus();
-                _View?.Focus();
                 OnMouseButton(e);
                 if (e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Pressed)
                     CaptureMouse();

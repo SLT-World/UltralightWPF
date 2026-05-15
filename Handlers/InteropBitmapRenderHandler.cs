@@ -32,9 +32,10 @@ namespace UltralightWPF.Handlers
             }
         }
 
-        public unsafe void UpdateBitmap(ULSurface Surface)
+        public unsafe void UpdateBitmap(View View)
         {
-            if (_Bitmap == null || _MapPointer == IntPtr.Zero) return;
+            if (_Bitmap == null || View.Surface == null || _MapPointer == IntPtr.Zero) return;
+            ULSurface Surface = View.Surface.Value;
             ULIntRect DirtyRect = Surface.DirtyBounds;
             if (DirtyRect.IsEmpty) return;
 

@@ -22,23 +22,24 @@ namespace UltralightWPF
             Instance = this;
         }
 
-        public Renderer Initialize(ULSettings? Settings = null, ULConfig? Config = null)
+        public bool Initialize(ULSettings? Settings = null, ULConfig? Config = null)
         {
             if (GlobalRenderer != null)
-                return GlobalRenderer;
+                return true;
             Settings ??= new() { ForceCPURenderer = false, LoadShadersFromFileSystem = true };
             Config ??= new();
-            //AppCoreMethods.ulEnableDefaultLogger("./log.txt");
             AppCoreMethods.SetPlatformFontLoader();
+            //AppCoreMethods.ulEnablePlatformFileSystem("./assets");
             ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
             GlobalApp = ULApp.Create(Settings.Value, Config.Value);
             TargetFramePeriod = TimeSpan.FromSeconds(Config.Value.AnimationTimerDelay);
             //WARNING: Disables native clipboard functionality.
             //GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
             GlobalRenderer = GlobalApp.Renderer;
+            //GlobalRenderer.TryStartRemoteInspectorServer("127.0.0.1", 7676);
             Application.Current.Exit += OnApplicationExit;
             CompositionTarget.Rendering += OnCompositionRendering;
-            return GlobalRenderer;
+            return true;
         }
 
         private void OnApplicationExit(object sender, ExitEventArgs e)
@@ -53,7 +54,7 @@ namespace UltralightWPF
             for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
                 ActiveWebViews[i].Dispose();
             GlobalRenderer?.Dispose();
-            //GlobalApp?.Quit();
+            GlobalApp?.Quit();
         }
 
         public void RegisterView(UltralightWebView View)

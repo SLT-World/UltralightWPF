@@ -22,47 +22,57 @@ namespace UltralightWPF
         private Renderer? _Renderer;
         private View? _View;
         private bool _Disposed;
-        private IRenderHandler RenderHandler;
+        public IRenderHandler RenderHandler;
 
-        public string Title => _View?.Title ?? "";
-        public bool CanGoBack => _View?.CanGoBack ?? false;
-        public bool CanGoForward => _View?.CanGoForward ?? false;
+        public string Title { get; private set; } = "";
+        public bool CanGoBack { get; private set; } = false;
+        public bool CanGoForward { get; private set; } = false;
         public bool CanReload => IsBrowserInitialized;
-        public bool IsLoading => _View?.IsLoading ?? false;
+        public bool IsLoading { get; private set; } = false;
         public bool IsBrowserInitialized => _View != null;
+        private string CurrentUrl = "about:blank";
         public string Url
         {
-            get => _View?.URL ?? "about:blank";
+            get => CurrentUrl;
             set => Navigate(value);
         }
 
         public void Navigate(string Url)
         {
-            if (_View != null)
-                _View.URL = Url;
+            UltralightManager.Instance?.Invoke(() =>
+            {
+                if (_View != null)
+                    _View.URL = Url;
+            });
         }
 
         public void NavigateToString(string Text)
         {
-            if (_View != null)
-                _View.HTML = Text;
+            UltralightManager.Instance?.Invoke(() =>
+            {
+                if (_View != null)
+                    _View.HTML = Text;
+            });
         }
-        public void GoBack() => _View?.GoBack();
-        public void GoForward() => _View?.GoForward();
-        public void Reload() => _View?.Reload();
-        public void Stop() => _View?.Stop();
+        public void GoBack() => UltralightManager.Instance?.Invoke(() => _View?.GoBack());
+        public void GoForward() => UltralightManager.Instance?.Invoke(() => _View?.GoForward());
+        public void Reload() => UltralightManager.Instance?.Invoke(() => _View?.Reload());
+        public void Stop() => UltralightManager.Instance?.Invoke(() => _View?.Stop());
         public View? GetView() => _View;
-        
+
+        private double ActualZoomLevel = 1;
         public double ZoomLevel
         {
-            get => _View?.DeviceScale ?? 1;
+            //get => _View?.DeviceScale ?? 1;
+            get => ActualZoomLevel;
             set
             {
                 if (_View != null)
                 {
                     if (value < 0.25 || value > 5.25)
                         return;
-                    _View.DeviceScale = value;
+                    ActualZoomLevel = value;
+                    UltralightManager.Instance?.Invoke(() => _View.DeviceScale = value);
                 }
             }
         }
@@ -86,15 +96,20 @@ namespace UltralightWPF
         {
             int _Width = (int)Math.Max(1, sizeInfo.NewSize.Width);
             int _Height = (int)Math.Max(1, sizeInfo.NewSize.Height);
-            _View?.Resize((uint)_Width, (uint)_Height);
+            UltralightManager.Instance?.Invoke(() => _View?.Resize((uint)_Width, (uint)_Height));
             RenderHandler.AllocateBitmap(RenderImage, _Width, _Height);
+        }
+
+        public void CaptureSurfaceTexture()
+        {
+            if (_View == null) return;
+            RenderHandler.CaptureBitmap(_View!);
         }
 
         public void UpdateSurfaceTexture()
         {
             if (_View == null) return;
-            //TODO: Utilize GPU _View.RenderTarget.
-            RenderHandler.UpdateBitmap(_View!);
+            RenderHandler.UpdateBitmap(_View);
         }
 
         public void Initialize(ULViewConfig? Config = null, View? InitialView = null)
@@ -105,43 +120,54 @@ namespace UltralightWPF
                 new UltralightManager().Initialize();
 
             Config ??= UltralightManager.DefaultViewConfig;
+            ActualZoomLevel = Config.Value.InitialDeviceScale;
             _Renderer = UltralightManager.Instance.GlobalRenderer!;
-            _View = InitialView ?? _Renderer.CreateView((uint)Math.Max(1, ActualWidth), (uint)Math.Max(1, ActualHeight), Config);
-            _View.OnChangeTitle += View_OnChangeTitle;
-            _View.OnChangeURL += View_OnChangeURL;
-            //_View.OnChangeTooltip += View_OnChangeTooltip;
-            _View.OnChangeCursor += View_OnChangeCursor;
-            _View.OnBeginLoading += View_OnBeginLoading;
-            _View.OnFinishLoading += View_OnFinishLoading;
-            _View.OnFailLoading += View_OnFailLoading;
-            UltralightManager.Instance.RegisterView(this);
+            UltralightManager.Instance.Invoke(() =>
+            {
+                _View = InitialView ?? _Renderer.CreateView((uint)Math.Max(1, ActualWidth), (uint)Math.Max(1, ActualHeight), Config);
+                _View.OnChangeTitle += View_OnChangeTitle;
+                _View.OnChangeURL += View_OnChangeURL;
+                //_View.OnChangeTooltip += View_OnChangeTooltip;
+                _View.OnChangeCursor += View_OnChangeCursor;
+                _View.OnBeginLoading += View_OnBeginLoading;
+                _View.OnFinishLoading += View_OnFinishLoading;
+                _View.OnFailLoading += View_OnFailLoading;
+                UltralightManager.Instance.RegisterView(this);
+            });
             Focus();
         }
 
         private void View_OnFailLoading(ulong frameId, bool isMainFrame, string url, string description, string errorDomain, int errorCode)
         {
+            CanGoBack = _View?.CanGoBack ?? false;
+            CanGoForward = _View?.CanGoForward ?? false;
+            IsLoading = false;
             LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, false));
         }
 
         private void View_OnFinishLoading(ulong frameId, bool isMainFrame, string url)
         {
+            CanGoBack = _View?.CanGoBack ?? false;
+            CanGoForward = _View?.CanGoForward ?? false;
+            IsLoading = false;
             LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, false));
         }
 
         private void View_OnBeginLoading(ulong frameId, bool isMainFrame, string url)
         {
+            CanGoBack = _View?.CanGoBack ?? false;
+            CanGoForward = _View?.CanGoForward ?? false;
+            IsLoading = true;
             LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, true));
         }
 
         private void View_OnChangeURL(string e)
         {
+            CurrentUrl = e;
             UrlChanged.RaiseUIAsync(this, e);
         }
 
-        private void View_OnChangeCursor(ULCursor e)
-        {
-            Cursor = e.ToCursor();
-        }
+        private void View_OnChangeCursor(ULCursor e) => Application.Current.Dispatcher.Invoke(() => Cursor = e.ToCursor());
 
         public event EventHandler<LoadingStateResult> LoadingStateChanged;
         public event EventHandler<string> UrlChanged;
@@ -155,6 +181,7 @@ namespace UltralightWPF
 
         private void View_OnChangeTitle(string e)
         {
+            Title = e;
             TitleChanged.RaiseUIAsync(this, e);
         }
 
@@ -165,12 +192,12 @@ namespace UltralightWPF
             Debug.WriteLine(InspectorView.URL);
             if (InspectorView != null)
                 InspectorWebView.Initialize(Config, InspectorView);*/
-            /*Window InspectorWindow = new()
-            {
-                Title = $"Ultralight Developer Tools - {InspectedUrl}",
-                Width = 800,
-                Height = 600
-            };*/
+        /*Window InspectorWindow = new()
+        {
+            Title = $"Ultralight Developer Tools - {InspectedUrl}",
+            Width = 800,
+            Height = 600
+        };*/
         //}
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -178,7 +205,7 @@ namespace UltralightWPF
             if (!e.Handled && _View != null)
             {
                 bool IsShiftKeyDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
-                _View?.FireScrollEvent(new ULScrollEvent() { DeltaX = IsShiftKeyDown ? e.Delta : 0, DeltaY = IsShiftKeyDown ? 0 : e.Delta, Type = ULScrollEventType.ByPixel });
+                UltralightManager.Instance?.Invoke(() => _View?.FireScrollEvent(new ULScrollEvent() { DeltaX = IsShiftKeyDown ? e.Delta : 0, DeltaY = IsShiftKeyDown ? 0 : e.Delta, Type = ULScrollEventType.ByPixel }));
                 e.Handled = true;
             }
             base.OnMouseWheel(e);
@@ -191,8 +218,8 @@ namespace UltralightWPF
                 string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
+                UltralightManager.Instance?.Invoke(() => _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System)));
                 //_View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
-                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.RawKeyDown, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
                 if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
                     e.Handled = true;
             }
@@ -206,8 +233,8 @@ namespace UltralightWPF
                 string Text = Helpers.KeyToString(e.Key, Keyboard.Modifiers);
                 string Unmodified = Helpers.KeyToString(e.Key, ModifierKeys.None);
                 int KeyCode = KeyInterop.VirtualKeyFromKey(e.Key);
+                UltralightManager.Instance?.Invoke(() => _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System)));
                 //_View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, Helpers.GetNativeScanCode((uint)KeyCode), Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
-                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.KeyUp, Keyboard.Modifiers.ToULKeyEventModifiers(), KeyCode, 0, Text, Unmodified, e.Key >= Key.NumPad0 && e.Key <= Key.Divide, e.IsRepeat, e.Key == Key.System));
                 if (e.Key == Key.Tab || e.Key == Key.Home || e.Key == Key.End || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right || (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control))
                     e.Handled = true;
             }
@@ -231,7 +258,7 @@ namespace UltralightWPF
                 //char Character = Text[i];
                 string CharString = Text[i].ToString();
                 //int KeyCode = Helpers.CharToKeyCode(Character);
-                _View.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, CharString, CharString, false, false, false));
+                UltralightManager.Instance?.Invoke(() => _View?.FireKeyEvent(ULKeyEvent.Create(ULKeyEventType.Char, Keyboard.Modifiers.ToULKeyEventModifiers(), 0, 0, CharString, CharString, false, false, false)));
             }
         }
 
@@ -240,26 +267,26 @@ namespace UltralightWPF
             if (!e.Handled && _View != null && e.StylusDevice == null)
             {
                 Point Coordinate = e.GetPosition(this);
-                _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
+                UltralightManager.Instance?.Invoke(() => _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) }));
             }
             base.OnMouseMove(e);
         }
 
         protected override void OnGotFocus(RoutedEventArgs e)
         {
-            _View?.Focus();
+            UltralightManager.Instance?.Invoke(() => _View?.Focus());
             base.OnGotFocus(e);
         }
 
         protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
         {
-            _View?.Focus();
+            UltralightManager.Instance?.Invoke(() => _View?.Focus());
             base.OnGotKeyboardFocus(e);
         }
 
         protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
         {
-            _View?.Unfocus();
+            UltralightManager.Instance?.Invoke(() => _View?.Unfocus());
             base.OnLostKeyboardFocus(e);
         }
 
@@ -304,7 +331,7 @@ namespace UltralightWPF
                 else
                 {
                     Point Coordinate = e.GetPosition(this);
-                    _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
+                    UltralightManager.Instance?.Invoke(() => _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) }));
                 }
                 e.Handled = true;
             }
@@ -315,7 +342,7 @@ namespace UltralightWPF
             if (!e.Handled && _View != null && e.StylusDevice == null)
             {
                 Point Coordinate = e.GetPosition(this);
-                _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) });
+                UltralightManager.Instance?.Invoke(() => _View.FireMouseEvent(new ULMouseEvent() { Button = ULMouseEventButton.None, Type = ULMouseEventType.MouseMoved, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) }));
             }
             base.OnMouseLeave(e);
         }

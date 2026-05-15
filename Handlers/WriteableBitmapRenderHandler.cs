@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -10,6 +9,7 @@ namespace UltralightWPF.Handlers
     public class WriteableBitmapRenderHandler : IRenderHandler
     {
         private WriteableBitmap? _Bitmap;
+        public bool ClearDirty { get; set; }
 
         public void AllocateBitmap(Image _Image, int _Width, int _Height)
         {
@@ -20,10 +20,13 @@ namespace UltralightWPF.Handlers
                 _Image.Source = _Bitmap;
             }
         }
-
-        public unsafe void UpdateBitmap(View View)
+        private byte[] PixelBuffer;
+        private ULIntRect PendingDirty;
+        private bool HasPendingDirty;
+        public unsafe void CaptureBitmap(View View)
         {
             if (_Bitmap == null || View.Surface == null) return;
+
             ULSurface Surface = View.Surface.Value;
             ULIntRect DirtyRect = Surface.DirtyBounds;
             if (DirtyRect.IsEmpty) return;
@@ -31,50 +34,71 @@ namespace UltralightWPF.Handlers
             int TotalWidth = (int)Surface.Width;
             int TotalHeight = (int)Surface.Height;
 
-            if (_Bitmap.PixelWidth != TotalWidth || _Bitmap.PixelHeight != TotalHeight) return;
-
-            int Width = DirtyRect.Right - DirtyRect.Left;
-            int Height = DirtyRect.Bottom - DirtyRect.Top;
-
-            if (Width <= 0 || Height <= 0) return;
-            bool CopyFullFrame = TotalWidth == Width && TotalHeight == Height;
-            if (!CopyFullFrame)
-                CopyFullFrame = ((double)(Width * Height) / (TotalWidth * TotalHeight)) > 0.25;
+            if (PixelBuffer == null || PixelBuffer.Length != TotalWidth * TotalHeight * 4)
+                PixelBuffer = new byte[TotalWidth * TotalHeight * 4];
 
             byte* pSrcPixels = Surface.LockPixels();
             try
             {
-                _Bitmap.Lock();
-                byte* pDestBase = (byte*)_Bitmap.BackBuffer;
-                if (CopyFullFrame)
+
+                uint srcStride = Surface.RowBytes;
+
+                fixed (byte* dstBase = PixelBuffer)
                 {
-                    Buffer.MemoryCopy(pSrcPixels, pDestBase, (ulong)(_Bitmap.BackBufferStride * TotalHeight), Surface.Size);
-                    _Bitmap.AddDirtyRect(new Int32Rect(0, 0, TotalWidth, TotalHeight));
+                    for (int Y = DirtyRect.Top; Y < DirtyRect.Bottom; Y++)
+                    {
+                        byte* srcRow = pSrcPixels + (Y * srcStride) + DirtyRect.Left * 4;
+                        byte* dstRow = dstBase + (Y * TotalWidth * 4) + DirtyRect.Left * 4;
+                        Buffer.MemoryCopy(srcRow, dstRow, (DirtyRect.Right - DirtyRect.Left) * 4, (DirtyRect.Right - DirtyRect.Left) * 4);
+                    }
                 }
-                else
+
+                PendingDirty = DirtyRect;
+                ClearDirty = false;
+                HasPendingDirty = true;
+            }
+            finally
+            {
+                Surface.UnlockPixels();
+            }
+        }
+
+        public unsafe void UpdateBitmap(View View)
+        {
+            if (_Bitmap == null || !HasPendingDirty || PendingDirty.IsEmpty || PixelBuffer == null)
+                return;
+
+            _Bitmap.Lock();
+
+            try
+            {
+                ClearDirty = true;
+
+                int X = PendingDirty.Left;
+                int Y = PendingDirty.Top;
+                int Width = PendingDirty.Right - X;
+                int Height = PendingDirty.Bottom - Y;
+
+                //Debug.WriteLine($"{Width} {Height}");
+
+                fixed (byte* pSrcPixels = PixelBuffer)
                 {
-                    int X = DirtyRect.Left;
-                    int Y = DirtyRect.Top;
-                    int destStride = _Bitmap.BackBufferStride;
-                    uint srcStride = Surface.RowBytes;
-                    int bytesPerPixel = 4;
-                    byte* pSrc = pSrcPixels + (Y * srcStride) + (X * bytesPerPixel);
-                    byte* pDest = pDestBase + (Y * destStride) + (X * bytesPerPixel);
-                    uint lineLengthInBytes = (uint)(Width * bytesPerPixel);
                     for (int i = 0; i < Height; i++)
                     {
-                        Unsafe.CopyBlockUnaligned(pDest, pSrc, lineLengthInBytes);
-                        pSrc += srcStride;
-                        pDest += destStride;
+                        byte* srcRow = pSrcPixels + ((Y + i) * _Bitmap.PixelWidth * 4) + X * 4;
+                        byte* dstRow = (byte*)_Bitmap.BackBuffer + ((Y + i) * _Bitmap.BackBufferStride) + X * 4;
+                        Buffer.MemoryCopy(srcRow, dstRow, Width * 4, Width * 4);
                     }
-                    _Bitmap.AddDirtyRect(new Int32Rect(X, Y, Width, Height));
                 }
+
+                _Bitmap.AddDirtyRect(new Int32Rect(X, Y, Width, Height));
             }
             finally
             {
                 _Bitmap.Unlock();
-                Surface.UnlockPixels();
-                Surface.ClearDirtyBounds();
+                ClearDirty = true;
+                HasPendingDirty = false;
+                PendingDirty = default;
             }
         }
 

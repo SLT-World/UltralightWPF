@@ -7,12 +7,14 @@ using UltralightNet;
 
 namespace UltralightWPF.Handlers
 {
+    //TODO: Update.
     public class InteropBitmapRenderHandler : IRenderHandler
     {
         private InteropBitmap? _Bitmap;
         private IntPtr _SectionHandle = IntPtr.Zero;
         private IntPtr _MapPointer = IntPtr.Zero;
         private uint _BufferSize = 0;
+        public bool ClearDirty { get; set; }
 
         public void AllocateBitmap(Image _Image, int _Width, int _Height)
         {
@@ -30,6 +32,11 @@ namespace UltralightWPF.Handlers
                 _Bitmap = (InteropBitmap)Imaging.CreateBitmapSourceFromMemorySection(_SectionHandle, _Width, _Height, PixelFormats.Bgra32, Stride, 0);
                 _Image.Source = _Bitmap;
             }
+        }
+
+        public void CaptureBitmap(View View)
+        {
+
         }
 
         public unsafe void UpdateBitmap(View View)

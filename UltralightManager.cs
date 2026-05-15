@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Collections.Concurrent;
+using System.Windows;
 using System.Windows.Media;
 using UltralightNet;
 using UltralightNet.AppCore;
@@ -16,11 +17,20 @@ namespace UltralightWPF
         private TimeSpan LastFrameTime = TimeSpan.Zero;
 
         public static readonly ULViewConfig DefaultViewConfig = new() { IsAccelerated = false };
+        private readonly ConcurrentQueue<Action> DispatchQueue = new();
+
+        private Thread? UltralightThread;
 
         public UltralightManager()
         {
             Instance = this;
         }
+        public void Invoke(Action action)
+        {
+            DispatchQueue.Enqueue(action);
+        }
+
+        bool IsRunning = false;
 
         public bool Initialize(ULSettings? Settings = null, ULConfig? Config = null)
         {
@@ -28,15 +38,54 @@ namespace UltralightWPF
                 return true;
             Settings ??= new() { ForceCPURenderer = false, LoadShadersFromFileSystem = true };
             Config ??= new();
-            AppCoreMethods.SetPlatformFontLoader();
-            //AppCoreMethods.ulEnablePlatformFileSystem("./assets");
-            ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
-            GlobalApp = ULApp.Create(Settings.Value, Config.Value);
             TargetFramePeriod = TimeSpan.FromSeconds(Config.Value.AnimationTimerDelay);
-            //WARNING: Disables native clipboard functionality.
-            //GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
-            GlobalRenderer = GlobalApp.Renderer;
-            //GlobalRenderer.TryStartRemoteInspectorServer("127.0.0.1", 7676);
+            ManualResetEvent ReadyEvent = new(false);
+            IsRunning = true;
+
+            UltralightThread = new Thread(() =>
+            {
+                AppCoreMethods.SetPlatformFontLoader();
+                //AppCoreMethods.ulEnablePlatformFileSystem("./assets");
+                ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
+                GlobalApp = ULApp.Create(Settings.Value, Config.Value);
+                //WARNING: Disables native clipboard functionality.
+                //GlobalRenderer = ULPlatform.CreateRenderer(Config.Value);
+                GlobalRenderer = GlobalApp.Renderer;
+                ReadyEvent.Set();
+                //GlobalRenderer.TryStartRemoteInspectorServer("127.0.0.1", 7676);
+
+                /*TODO: Hwnd Host functionality
+                 * GlobalApp.Run();
+                 * WPF UI thread remain unaffected.
+                 */
+
+                while (IsRunning)
+                {
+                    while (DispatchQueue.TryDequeue(out Action _Action))
+                        _Action();
+                    GlobalRenderer.Update();
+                    for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
+                    {
+                        UltralightWebView View = ActiveWebViews[i];
+                        if (View.RenderHandler.ClearDirty)
+                        {
+                            View.RenderHandler.ClearDirty = false;
+                            View.GetView()?.Surface?.ClearDirtyBounds();
+                        }
+                    }
+                    GlobalRenderer.Render();
+                    for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
+                        ActiveWebViews[i].CaptureSurfaceTexture();
+                    Thread.Sleep(1);
+                }
+                Shutdown();
+            });
+
+            UltralightThread.SetApartmentState(ApartmentState.STA);
+            UltralightThread.IsBackground = true;
+            UltralightThread.Start();
+
+            ReadyEvent.WaitOne();
             Application.Current.Exit += OnApplicationExit;
             CompositionTarget.Rendering += OnCompositionRendering;
             return true;
@@ -49,12 +98,14 @@ namespace UltralightWPF
 
         public void Shutdown()
         {
+            IsRunning = false;
             Application.Current.Exit -= OnApplicationExit;
             CompositionTarget.Rendering -= OnCompositionRendering;
             for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
                 ActiveWebViews[i].Dispose();
             GlobalRenderer?.Dispose();
             GlobalApp?.Quit();
+            UltralightThread?.Join();
         }
 
         public void RegisterView(UltralightWebView View)
@@ -73,12 +124,9 @@ namespace UltralightWPF
             if (GlobalRenderer == null) return;
             TimeSpan CurrentElapsedTime = ((RenderingEventArgs)e).RenderingTime;
             TimeSpan FrameDelta = CurrentElapsedTime - LastFrameTime;
-
             if (FrameDelta >= TargetFramePeriod)
             {
                 LastFrameTime = CurrentElapsedTime;
-                GlobalRenderer.Update();
-                GlobalRenderer.Render();
                 for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
                     ActiveWebViews[i].UpdateSurfaceTexture();
             }

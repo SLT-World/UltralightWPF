@@ -17,7 +17,7 @@ namespace UltralightWPF
     /// <summary>
     /// Interaction logic for UltralightWebView.xaml
     /// </summary>
-    public partial class UltralightWebView : UserControl, IDisposable
+    public partial class UltralightWebView : UserControl, IUltralightWebView
     {
         private Renderer? _Renderer;
         private View? _View;
@@ -76,7 +76,7 @@ namespace UltralightWPF
                 }
             }
         }
-        public double ZoomFactor = 1.1;
+        public double ZoomFactor { get; set; } = 1.1;
         public void ZoomIn() =>
             ZoomLevel *= ZoomFactor;
         public void ZoomOut() =>
@@ -115,9 +115,11 @@ namespace UltralightWPF
         public void Initialize(ULViewConfig? Config = null, View? InitialView = null)
         {
             if (_Disposed)
-                throw new Exception("Disposed");
+                throw new ObjectDisposedException("Disposed");
             if (UltralightManager.Instance == null)
                 new UltralightManager().Initialize();
+            else if (UltralightManager.Instance.IsHwndHost)
+                throw new InvalidOperationException("An HwndHost web renderer implementation has already been registered. The application must exclusively use the HwndHost implementation.");
 
             Config ??= UltralightManager.DefaultViewConfig;
             ActualZoomLevel = Config.Value.InitialDeviceScale;
@@ -161,13 +163,28 @@ namespace UltralightWPF
             LoadingStateChanged.RaiseUIAsync(this, new LoadingStateResult(url, frameId, isMainFrame, true));
         }
 
+        private void View_OnChangeTitle(string e)
+        {
+            Title = e;
+            TitleChanged.RaiseUIAsync(this, e);
+        }
+
         private void View_OnChangeURL(string e)
         {
             CurrentUrl = e;
             UrlChanged.RaiseUIAsync(this, e);
         }
 
-        private void View_OnChangeCursor(ULCursor e) => Application.Current.Dispatcher.Invoke(() => Cursor = e.ToCursor());
+
+        ULCursor CurrentCursor = ULCursor.None;
+        private void View_OnChangeCursor(ULCursor e)
+        {
+            if (CurrentCursor != e)
+            {
+                Application.Current.Dispatcher.Invoke(() => Cursor = e.ToCursor());
+                CurrentCursor = e;
+            }
+        }
 
         public event EventHandler<LoadingStateResult> LoadingStateChanged;
         public event EventHandler<string> UrlChanged;
@@ -178,12 +195,6 @@ namespace UltralightWPF
         {
             ToolTipChanged.RaiseUIAsync(this, e);
         }*/
-
-        private void View_OnChangeTitle(string e)
-        {
-            Title = e;
-            TitleChanged.RaiseUIAsync(this, e);
-        }
 
         //TODO: Investigate inoperability.
         /*public void ShowInspector(UltralightWebView InspectorWebView, ULViewConfig? Config = null)
@@ -317,7 +328,8 @@ namespace UltralightWPF
         {
             if (!e.Handled && _View != null)
             {
-                bool MouseUp = e.ButtonState == MouseButtonState.Released;
+                //NOTE: Back/forward navigation controls is omitted here to allow for custom user implementation.
+                /*bool MouseUp = e.ButtonState == MouseButtonState.Released;
                 if (e.ChangedButton == MouseButton.XButton1)
                 {
                     if (CanGoBack && MouseUp)
@@ -328,10 +340,11 @@ namespace UltralightWPF
                     if (CanGoForward && MouseUp)
                         GoForward();
                 }
-                else
+                else*/
+                if (e.ChangedButton != MouseButton.XButton1 && e.ChangedButton != MouseButton.XButton2)
                 {
                     Point Coordinate = e.GetPosition(this);
-                    UltralightManager.Instance?.Invoke(() => _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = MouseUp ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) }));
+                    UltralightManager.Instance?.Invoke(() => _View.FireMouseEvent(new ULMouseEvent() { Button = e.GetMouseEvents(), Type = e.ButtonState == MouseButtonState.Released ? ULMouseEventType.MouseUp : ULMouseEventType.MouseDown, X = (int)(Coordinate.X / _View.DeviceScale), Y = (int)(Coordinate.Y / _View.DeviceScale) }));
                 }
                 e.Handled = true;
             }

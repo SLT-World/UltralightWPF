@@ -1,7 +1,5 @@
 ﻿using System.Windows;
 using System.Windows.Input;
-using UltralightNet;
-using UltralightNet.AppCore;
 
 namespace UltralightWPF
 {
@@ -18,14 +16,14 @@ namespace UltralightWPF
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
+            //new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
 
-            BrowserView.Initialize(new ULViewConfig() { IsAccelerated = false });
+            BrowserView.Initialize();
+            BrowserView.Navigate("https://slt-world.github.io/tests/");
+            //BrowserView.Navigate("https://keyboardchecker.com/");
             //BrowserView.Navigate("https://www.w3schools.com/cssref/tryit.php?filename=trycss_cursor");
             //BrowserView.Navigate("https://ultralig.ht");
             //BrowserView.Navigate("file:///inspector/Main.html");
-            BrowserView.Navigate("https://slt-world.github.io/tests/");
-            //BrowserView.Navigate("https://keyboardchecker.com/");
             BrowserView.TitleChanged += BrowserView_TitleChanged;
             BrowserView.PreviewMouseWheel += BrowserView_PreviewMouseWheel;
             //BrowserView.ToolTipChanged += BrowserView_ToolTipChanged;

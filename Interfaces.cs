@@ -5,10 +5,11 @@ namespace UltralightWPF
 {
     public interface IRenderHandler : IDisposable
     {
+        Image? Target { get; set; }
         bool ClearDirty { get; set; }
-        void AllocateBitmap(Image _Image, int _Width, int _Height);
+        void AllocateBitmap(int _Width, int _Height);
         void CaptureBitmap(View View);
-        void UpdateBitmap(View View);
+        void UpdateBitmap();
         void ReleaseBitmap();
     }
 }

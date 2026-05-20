@@ -11,8 +11,8 @@
             <ColumnDefinition/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>-->
-        <!--<local:UltralightWebView x:Name="BrowserView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="Auto" Width="Auto"/>-->
-        <local:UltralightHwndWebView x:Name="BrowserView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="Auto" Width="Auto"/>
+        <local:UltralightWebView x:Name="BrowserView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="Auto" Width="Auto"/>
+        <!--<local:UltralightHwndWebView x:Name="BrowserView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="Auto" Width="Auto"/>-->
         <!--<local:UltralightWebView Grid.Column="1" Visibility="Collapsed" x:Name="InspectorView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="Auto" Width="Auto"/>-->
     </Grid>
 </Window>

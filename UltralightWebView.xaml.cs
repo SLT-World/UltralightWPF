@@ -90,6 +90,7 @@ namespace UltralightWPF
             //RenderHandler = new InteropBitmapRenderHandler();
             RenderHandler = new WriteableBitmapRenderHandler();
             //RenderHandler = new D3DImageRenderHandler();
+            RenderHandler.Target = RenderImage;
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -97,7 +98,6 @@ namespace UltralightWPF
             int _Width = (int)Math.Max(1, sizeInfo.NewSize.Width);
             int _Height = (int)Math.Max(1, sizeInfo.NewSize.Height);
             UltralightManager.Instance?.Invoke(() => _View?.Resize((uint)_Width, (uint)_Height));
-            RenderHandler.AllocateBitmap(RenderImage, _Width, _Height);
         }
 
         public void CaptureSurfaceTexture()
@@ -108,8 +108,7 @@ namespace UltralightWPF
 
         public void UpdateSurfaceTexture()
         {
-            if (_View == null) return;
-            RenderHandler.UpdateBitmap(_View);
+            RenderHandler.UpdateBitmap();
         }
 
         public void Initialize(ULViewConfig? Config = null, View? InitialView = null)

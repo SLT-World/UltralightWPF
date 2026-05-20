@@ -1,5 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Input;
+using UltralightNet;
+using UltralightNet.AppCore;
 
 namespace UltralightWPF
 {
@@ -16,7 +18,7 @@ namespace UltralightWPF
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            //new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
+            new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
 
             BrowserView.Initialize();
             BrowserView.Navigate("https://slt-world.github.io/tests/");

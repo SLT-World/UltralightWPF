@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -7,91 +6,129 @@ using UltralightNet;
 
 namespace UltralightWPF.Handlers
 {
-    //TODO: Update.
     public class InteropBitmapRenderHandler : IRenderHandler
     {
+        public Image? Target { get; set; }
         private InteropBitmap? _Bitmap;
         private IntPtr _SectionHandle = IntPtr.Zero;
         private IntPtr _MapPointer = IntPtr.Zero;
-        private uint _BufferSize = 0;
         public bool ClearDirty { get; set; }
+        private ULIntRect PendingDirty;
+        private bool HasPendingDirty;
+        private int CachedWidth;
+        private int CachedHeight;
+        private int CachedStride;
+        private uint CachedTotalBytes;
 
-        public void AllocateBitmap(Image _Image, int _Width, int _Height)
+        private readonly object RenderLock = new();
+
+        public void AllocateBitmap(int _Width, int _Height)
         {
+            if (Target == null) return;
             if (_Bitmap == null || _Bitmap.PixelWidth != _Width || _Bitmap.PixelHeight != _Height)
             {
-                ReleaseBitmap();
-                int Stride = _Width * 4;
-                _BufferSize = (uint)(Stride * _Height);
+                lock (RenderLock)
+                {
+                    ReleaseBitmap();
+                    CachedWidth = _Width;
+                    CachedHeight = _Height;
+                    CachedStride = _Width * 4;
+                    CachedTotalBytes = (uint)(CachedStride * _Height);
 
-                _SectionHandle = DllUtils.CreateFileMapping(DllUtils.INVALID_HANDLE_VALUE, IntPtr.Zero, DllUtils.PAGE_READWRITE, 0, _BufferSize, null);
-                if (_SectionHandle == IntPtr.Zero) return;
-                _MapPointer = DllUtils.MapViewOfFile(_SectionHandle, DllUtils.FILE_MAP_ALL_ACCESS, 0, 0, _BufferSize);
-                if (_MapPointer == IntPtr.Zero) return;
+                    _SectionHandle = DllUtils.CreateFileMapping(DllUtils.INVALID_HANDLE_VALUE, IntPtr.Zero, DllUtils.PAGE_READWRITE, 0, CachedTotalBytes, null);
+                    if (_SectionHandle == IntPtr.Zero) return;
+                    _MapPointer = DllUtils.MapViewOfFile(_SectionHandle, DllUtils.FILE_MAP_ALL_ACCESS, 0, 0, CachedTotalBytes);
+                    if (_MapPointer == IntPtr.Zero) return;
 
-                _Bitmap = (InteropBitmap)Imaging.CreateBitmapSourceFromMemorySection(_SectionHandle, _Width, _Height, PixelFormats.Bgra32, Stride, 0);
-                _Image.Source = _Bitmap;
+                    _Bitmap = (InteropBitmap)Imaging.CreateBitmapSourceFromMemorySection(_SectionHandle, _Width, _Height, PixelFormats.Bgra32, CachedStride, 0);
+                    Target.Source = _Bitmap;
+                }
             }
         }
 
-        public void CaptureBitmap(View View)
+        public unsafe void CaptureBitmap(View View)
         {
+            if (Target == null || View.Surface == null) return;
 
-        }
-
-        public unsafe void UpdateBitmap(View View)
-        {
-            if (_Bitmap == null || View.Surface == null || _MapPointer == IntPtr.Zero) return;
             ULSurface Surface = View.Surface.Value;
+            int SurfaceWidth = (int)Surface.Width;
+            int SurfaceHeight = (int)Surface.Height;
+
+            if (_Bitmap == null || CachedWidth != SurfaceWidth || CachedHeight != SurfaceHeight)
+            {
+                Target.Dispatcher.Invoke(() =>
+                {
+                    AllocateBitmap(SurfaceWidth, SurfaceHeight);
+                });
+            }
+
             ULIntRect DirtyRect = Surface.DirtyBounds;
             if (DirtyRect.IsEmpty) return;
-
-            int TotalWidth = (int)Surface.Width;
-            int TotalHeight = (int)Surface.Height;
-
-            if (_Bitmap.PixelWidth != TotalWidth || _Bitmap.PixelHeight != TotalHeight) return;
-
-            int Width = DirtyRect.Right - DirtyRect.Left;
-            int Height = DirtyRect.Bottom - DirtyRect.Top;
-
-            if (Width <= 0 || Height <= 0) return;
-            bool CopyFullFrame = TotalWidth == Width && TotalHeight == Height;
-            if (!CopyFullFrame)
-                CopyFullFrame = ((double)(Width * Height) / (TotalWidth * TotalHeight)) > 0.25;
 
             byte* pSrcPixels = Surface.LockPixels();
             try
             {
-                //TODO: Tearing observed.
-                byte* pDestBase = (byte*)_MapPointer;
-                if (CopyFullFrame)
+                uint srcStride = Surface.RowBytes;
+                int X = DirtyRect.Left;
+                int Y = DirtyRect.Top;
+                int Width = DirtyRect.Right - X;
+                int Height = DirtyRect.Bottom - Y;
+                long LineLength = Width * 4;
+
+                lock (RenderLock)
                 {
-                    Buffer.MemoryCopy(pSrcPixels, pDestBase, _BufferSize, (long)Surface.Size);
-                    _Bitmap.Invalidate();
-                }
-                else
-                {
-                    int X = DirtyRect.Left;
-                    int Y = DirtyRect.Top;
-                    int destStride = TotalWidth * 4;
-                    uint srcStride = Surface.RowBytes;
-                    int bytesPerPixel = 4;
-                    byte* pSrc = pSrcPixels + (Y * srcStride) + (X * bytesPerPixel);
-                    byte* pDest = pDestBase + (Y * destStride) + (X * bytesPerPixel);
-                    uint lineLengthInBytes = (uint)(Width * bytesPerPixel);
-                    for (int i = 0; i < Height; i++)
+                    if (_MapPointer == IntPtr.Zero) return;
+                    byte* pDestBase = (byte*)_MapPointer;
+                    if (Width == CachedWidth && Height == CachedHeight)
+                        Buffer.MemoryCopy(pSrcPixels, pDestBase, CachedTotalBytes, CachedTotalBytes);
+                    else
                     {
-                        Unsafe.CopyBlockUnaligned(pDest, pSrc, lineLengthInBytes);
-                        pSrc += srcStride;
-                        pDest += destStride;
+                        byte* pSrcStart = pSrcPixels + (Y * srcStride) + (X * 4);
+                        byte* pDstStart = pDestBase + (Y * CachedStride) + (X * 4);
+
+                        for (int i = 0; i < Height; i++)
+                        {
+                            Buffer.MemoryCopy(pSrcStart, pDstStart, LineLength, LineLength);
+                            pSrcStart += srcStride;
+                            pDstStart += CachedStride;
+                        }
                     }
-                    _Bitmap.Invalidate(new Int32Rect(X, Y, Width, Height));
                 }
+
+                PendingDirty = DirtyRect;
+                ClearDirty = false;
+                HasPendingDirty = true;
             }
             finally
             {
                 Surface.UnlockPixels();
-                Surface.ClearDirtyBounds();
+            }
+        }
+
+        public void UpdateBitmap()
+        {
+            if (Target == null || _Bitmap == null || !HasPendingDirty || _MapPointer == IntPtr.Zero || PendingDirty.IsEmpty)
+                return;
+            try
+            {
+                ClearDirty = true;
+                int X = PendingDirty.Left;
+                int Y = PendingDirty.Top;
+                int Width = PendingDirty.Right - X;
+                int Height = PendingDirty.Bottom - Y;
+                if (X < 0 || Y < 0 || (X + Width) > CachedWidth || (Y + Height) > CachedHeight || Width <= 0 || Height <= 0)
+                    return;
+
+                if (Width == CachedWidth && Height == CachedHeight)
+                    _Bitmap.Invalidate();
+                else
+                    _Bitmap.Invalidate(new Int32Rect(X, Y, Width, Height));
+            }
+            finally
+            {
+                ClearDirty = true;
+                HasPendingDirty = false;
+                PendingDirty = default;
             }
         }
 

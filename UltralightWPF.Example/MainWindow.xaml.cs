@@ -3,7 +3,7 @@ using System.Windows.Input;
 using UltralightNet;
 using UltralightNet.AppCore;
 
-namespace UltralightWPF
+namespace UltralightWPF.Example
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -18,30 +18,32 @@ namespace UltralightWPF
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
+            //new UltralightManager().Initialize(new ULSettings() { ForceCPURenderer = false }, new ULConfig() { AnimationTimerDelay = 1.0 / 90.0 });
 
             BrowserView.Initialize();
-            BrowserView.Navigate("https://slt-world.github.io/tests/");
+            BrowserView.Navigate("https://ultralig.ht/");
+            //BrowserView.Navigate("https://slt-world.github.io/tests/");
             //BrowserView.Navigate("https://keyboardchecker.com/");
             //BrowserView.Navigate("https://www.w3schools.com/cssref/tryit.php?filename=trycss_cursor");
-            //BrowserView.Navigate("https://ultralig.ht");
             //BrowserView.Navigate("file:///inspector/Main.html");
             BrowserView.TitleChanged += BrowserView_TitleChanged;
+            BrowserView.UrlChanged += BrowserView_UrlChanged;
+            BrowserView.LoadingStateChanged += BrowserView_LoadingStateChanged;
             BrowserView.PreviewMouseWheel += BrowserView_PreviewMouseWheel;
             //BrowserView.ToolTipChanged += BrowserView_ToolTipChanged;
+        }
 
-            //TODO: HwndHost control, device scale issue encountered.
-            /*AppCoreMethods.SetPlatformFontLoader();
-            ULPlatform.FileSystem = ULPlatform.DefaultFileSystem;
-            using ULApp App = ULApp.Create(new(), new());
-            using ULWindow _Window = App.MainMonitor.CreateWindow(512, 512);
-            _Window.Title = "AppCore HwndHost";
-            using ULOverlay Overlay = _Window.CreateOverlay(_Window.ScreenWidth, _Window.ScreenHeight);
-            _Window.OnResize += Overlay.Resize;
-            _Window.OnClose += App.Quit;
-            View _View = Overlay.View;
-            _View.URL = "https://slt-world.github.io/tests/";
-            App.Run();*/
+        private void BrowserView_UrlChanged(object? sender, string e)
+        {
+            AddressBox.Text = e;
+        }
+
+        private void BrowserView_LoadingStateChanged(object? sender, LoadingStateResult e)
+        {
+            BackButton.IsEnabled = BrowserView.CanGoBack;
+            ForwardButton.IsEnabled = BrowserView.CanGoForward;
+            RefreshButton.IsEnabled = BrowserView.CanReload;
+            RefreshButtonIcon.Text = e.IsLoading ? "\xF78A" : "\xe72c";
         }
 
         /*protected override void OnKeyDown(KeyEventArgs e)
@@ -83,6 +85,32 @@ namespace UltralightWPF
         private void BrowserView_TitleChanged(object? sender, string e)
         {
             Title = e;
+        }
+
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            BrowserView.GoBack();
+        }
+
+        private void ForwardButton_Click(object sender, RoutedEventArgs e)
+        {
+            BrowserView.GoForward();
+        }
+
+        private void RefreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (BrowserView.IsLoading)
+                BrowserView.Stop();
+            else
+                BrowserView.Reload();
+        }
+
+        private void AddressBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                BrowserView.Navigate(AddressBox.Text);
+            }
         }
     }
 }

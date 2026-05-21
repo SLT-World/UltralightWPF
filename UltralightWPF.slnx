@@ -3,7 +3,8 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="UltralightWPF.csproj">
+  <Project Path="UltralightWPF.Example/UltralightWPF.Example.csproj" Id="b417e790-7e4a-4d22-862c-4e7aac25bd98" />
+  <Project Path="UltralightWPF/UltralightWPF.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
 </Solution>

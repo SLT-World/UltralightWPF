@@ -112,7 +112,8 @@ namespace UltralightWPF
         {
             IsRunning = false;
             Application.Current.Exit -= OnApplicationExit;
-            CompositionTarget.Rendering -= OnCompositionRendering;
+            if (!IsHwndHost)
+                CompositionTarget.Rendering -= OnCompositionRendering;
             for (int i = ActiveWebViews.Count - 1; i >= 0; i--)
                 ActiveWebViews[i].Dispose();
             GlobalRenderer?.Dispose();
@@ -135,8 +136,7 @@ namespace UltralightWPF
         {
             if (GlobalRenderer == null || IsHwndHost) return;
             TimeSpan CurrentElapsedTime = ((RenderingEventArgs)e).RenderingTime;
-            TimeSpan FrameDelta = CurrentElapsedTime - LastFrameTime;
-            if (FrameDelta >= TargetFramePeriod)
+            if (CurrentElapsedTime - LastFrameTime >= TargetFramePeriod)
             {
                 LastFrameTime = CurrentElapsedTime;
                 for (int i = ActiveWebViews.Count - 1; i >= 0; i--)

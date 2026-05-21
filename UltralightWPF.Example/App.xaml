@@ -1,9 +1,9 @@
-﻿<Application x:Class="UltralightWPF.App"
+﻿<Application x:Class="UltralightWPF.Example.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:UltralightWPF"
+             xmlns:local="clr-namespace:UltralightWPF.Example"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
     </Application.Resources>
 </Application>

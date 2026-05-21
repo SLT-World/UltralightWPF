@@ -88,6 +88,7 @@ namespace UltralightWPF
 
         public unsafe void Initialize(ULViewConfig? Config = null, View? InitialView = null)
         {
+            //TODO: Resolve device scale issue.
             if (_Disposed)
                 throw new ObjectDisposedException("Disposed");
             if (ContainerHwnd == IntPtr.Zero) return;
